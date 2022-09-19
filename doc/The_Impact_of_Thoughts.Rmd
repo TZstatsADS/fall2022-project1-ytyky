@@ -120,6 +120,38 @@ citation <- merge(direct_citation, citation_factors, by.x = "author",
 ```
 
 
+
+```{r}
+kruskal.test(occurance ~ school, data = citation)
+kruskal.test(occurance ~ time_period, data = citation)
+kruskal.test(occurance ~ total_length, data = citation)
+```
+
+The three KW test suggested all have quite big p-values, which implies the reputations of philosophers are uncorrelated with their publications' length, school they are in, and the time period they lived.
+
+We could then cluster the philosophers by schools, find their school influence by capturing occurrence of their school in philosophy corpus
+
+```{r}
+school = unique(philosophy_data['school'])
+occurance = rep(0, nrow(school))
+school_reputation <- data.frame(school, occurance)
+for (i in 1:nrow(school)) {
+    # find direct citation, exclude self-cited corpus
+    school_reputation[i,2] = sum(grepl(tolower(school_reputation[i,1]), (philosophy_data %>% filter(!school %in%c(school_reputation[i,1])))$sentence_lowered))
+}
+```
+
+```{r}
+p2<-ggplot(data=school_reputation, aes(x=reorder(school, -occurance), y=occurance)) +
+  geom_bar(stat="identity") +
+  xlab("school") + 
+  ggtitle("school reputation")
+p2
+```
+
+From the graph we observed that analytic school has high frequency in other school's corpus. German idealism, which Kant belongs to, surprisingly was the least mentioned school (actually, 0 time appeared in other corpus).
+
+
 ## Topic Modeling
 
 ```{r}
@@ -133,41 +165,14 @@ original_tf <- tf %>% select(term, term_freq,doc_freq)
 rownames(original_tf) <- 1:nrow(original_tf)
 # Eliminate words appearing less than 2 times or in more than half of the
 # documents
-vocabulary <- tf$term[ tf$term_freq > 1 & tf$doc_freq < nrow(dtm) / 2 ]
+vocabulary <- stf$term[ tf$term_freq > 1 & tf$doc_freq < nrow(dtm) / 2 ]
 dtm = dtm
 
 ```
 
 
-```{r}
-k_list <- seq(1, 5, by = 1)
-model_dir <- paste0("models_", digest::digest(vocabulary, algo = "sha1"))
-if (!dir.exists(model_dir)) dir.create(model_dir)
-model_list <- TmParallelApply(X = k_list, FUN = function(k){
-  filename = file.path(model_dir, paste0(k, "_topics.rda"))
-  
-  if (!file.exists(filename)) {
-    m <- FitLdaModel(dtm = dtm, k = k, iterations = 500)
-    m$k <- k
-    m$coherence <- CalcProbCoherence(phi = m$phi, dtm = dtm, M = 5)
-    save(m, file = filename)
-  } else {
-    load(filename)
-  }
-  
-  m
-}, export=c("dtm", "model_dir")) # export only needed for Windows machines
-#model tuning
-#choosing the best model
-coherence_mat <- data.frame(k = sapply(model_list, function(x) nrow(x$phi)), 
-                            coherence = sapply(model_list, function(x) mean(x$coherence)), 
-                            stringsAsFactors = FALSE)
-ggplot(coherence_mat, aes(x = k, y = coherence)) +
-  geom_point() +
-  geom_line(group = 1)+
-  ggtitle("Best Topic by Coherence Score") + theme_minimal() +
-  scale_x_continuous(breaks = seq(1,20,1)) + ylab("Coherence")
-```
+
+
 
 
 ## Conclusion
