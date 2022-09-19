@@ -24,24 +24,9 @@ if(length(packages.needed)>0){
   install.packages(packages.needed, dependencies = TRUE)
 }
 library(ggplot2)
-#library(dplyr)
+library(dplyr)
 library(redav)
-library("rvest")
-library("tibble")
-library("syuzhet")
-library("sentimentr")
-library("gplots")
-library("dplyr")
-library("tm")
-library("syuzhet")
-library("factoextra")
-library("beeswarm")
-library("scales")
-library("RColorBrewer")
-library("RANN")
-library("tm")
-library("topicmodels")
-library("stringr")
+library(textmineR)
 ```
 
 
@@ -139,8 +124,8 @@ citation <- merge(direct_citation, citation_factors, by.x = "author",
 
 ```{r}
 #create DTM
-dtm <- CreateDtm(tokens$text, 
-                 doc_names = tokens$ID, 
+dtm <- CreateDtm(philosophy_data$tokenized_txt, 
+                 doc_names = philosophy_data$author, 
                  ngram_window = c(1, 2))
 #explore the basic frequency
 tf <- TermDocFreq(dtm = dtm)
