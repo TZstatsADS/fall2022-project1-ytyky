@@ -77,7 +77,7 @@ To get a better sense of the dataset, we first take a glimpse of the dataset.
 * tokenized_txt
 * lemmatized_str
 
-### missing values
+### Missing values
 
 ```{r, warning=FALSE}
 missing_philosophy_data_show_case <- philosophy_data %>% 
@@ -130,6 +130,8 @@ It is hard to observe the influence of any philosopher in this method since the 
 
 ## 3.Influence Analysis
 
+### Author
+
 To find the influence of a philosopher, we can dive into the corpus and find connections. It is reasonable to speculate that if one philosopher was directly mentioned in other philosophers' work, they are impactful among colleagues. We can count the author's name in all texts at this stage.
 
 ```{r}
@@ -177,7 +179,7 @@ kruskal.test(occurance ~ time_period, data = citation)
 kruskal.test(occurance ~ total_length, data = citation)
 ```
 
-### school
+### School
 
 Another indirect influence indicator is the appearance of the school name in texts. We could cluster the philosophers by schools and find their influence by capturing the occurrence of school in the philosophy corpora. If a school has appeared in texts multiple times, the philosophers under the category are doing works that their peers recognize.
 
