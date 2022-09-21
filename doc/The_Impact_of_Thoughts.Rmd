@@ -4,7 +4,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
 ```
 
 
@@ -27,6 +27,13 @@ library(ggplot2)
 library(dplyr)
 library(redav)
 library(textmineR)
+library(ggalluvial)
+library(wordcloud)
+library(RColorBrewer)
+library(wordcloud2)
+library(tm)
+library(knitr)
+library(tidytext)
 ```
 
 
@@ -37,18 +44,15 @@ philosophy_data <- read.csv("../data/philosophy_data.csv")
 
 ## Intro
 
-Philosophers provide a way to think about the world systematically. Some of their thoughts are coincided, some are conflicted. One question raised naturally: when they develop their works, are they inspired by other philosopher in some way? 
+Philosophers provide a way to think about the world systematically. Their works influence many people potentially, providing methodology and useful tips for life. Some of their thoughts are coincided, some are conflicted. One question raised naturally: when they develop their works, are they inspired by other philosopher in some way? In another word, how philosophers influence their colleagues and the history of philosophy?
 
-Can we figure out the influence of philosophers' words though history? To be specific, how philosophers influence their colleagues and the history?
-
-
-To find how philosophers influence each other, I analyzed the history of philosophy dataset from [Philosophy Data Project](http://www.philosophydata.com/).
+In this project we dive into the corpus philosophers wrote and research on the influence of philosopher. We would approach this question with data mining techniques and try to quantify and visualize their influence by examining the history of philosophy dataset from [Philosophy Data Project](http://www.philosophydata.com/), figure out the influence of philosophers' words though history.
 
 
 
 ## Looking into the dataset
 
-In order to get a better sense of what data we are analyzing, we first take a glimpse on the dataset.
+In order to get a better sense of the dataset we are analyzing, we first take a glimpse on the dataset.
 
 ### Column Details
 
@@ -75,14 +79,24 @@ missing_philosophy_data_show_case <- philosophy_data %>%
 plot_missing(missing_philosophy_data_show_case)
 ```
 
-There is no missing values, and total contains 360808 complete sentences.
+There is no missing values, and total contains 360808 complete sentences.We then check how many unique authors, titles and schools collected in the dataset.
 
 ```{r}
-unique(philosophy_data['school'])
-unique(philosophy_data['author'])
+unique_data <- data.frame(uniqe_stat=sapply(philosophy_data, function(x) n_distinct(x)))
+unique_data <- cbind(unique_data,rownames(unique_data))
+unique_data <- unique_data %>% rename(information = `rownames(unique_data)`)
+rownames(unique_data) <- NULL
+copurs_info <- unique_data %>% filter(information %in% c('school', 'author',  'title'))
+ggplot(data=copurs_info, aes(x=information, y=uniqe_stat)) + 
+  geom_bar(stat="identity") +
+  xlab("information") + 
+  ylab("distinct values")
+  ggtitle("copurs information statitsics")
 ```
 
-Only 13 school and 36 distinct philosophers! Assumption is philosophers under same school could influence each other a lot. 
+Only 13 school and 36 distinct philosophers recorded and in total they create 55 corpus and over 360,000 sentences. 
+
+Assumption is philosophers under same school could influence each other a lot.
 
 ## Influence Analysis
 
@@ -129,6 +143,8 @@ kruskal.test(occurance ~ total_length, data = citation)
 
 The three KW test suggested all have quite big p-values, which implies the reputations of philosophers are uncorrelated with their publications' length, school they are in, and the time period they lived.
 
+### school
+
 We could then cluster the philosophers by schools, find their school influence by capturing occurrence of their school in philosophy corpus
 
 ```{r}
@@ -152,30 +168,61 @@ p2
 From the graph we observed that analytic school has high frequency in other school's corpus. German idealism, which Kant belongs to, surprisingly was the least mentioned school (actually, 0 time appeared in other corpus).
 
 
-## Topic Modeling
+### Corpus
+
+Partition over the whole dataset we could find topics that are discuss among all philosophy corpus. We could therefore create a wordcloud that visualize the high frequency words among all corpus
+
 
 ```{r}
-#create DTM
-dtm <- CreateDtm(philosophy_data$tokenized_txt, 
-                 doc_names = philosophy_data$author, 
-                 ngram_window = c(1, 2))
-#explore the basic frequency
-tf <- TermDocFreq(dtm = dtm)
-original_tf <- tf %>% select(term, term_freq,doc_freq)
-rownames(original_tf) <- 1:nrow(original_tf)
-# Eliminate words appearing less than 2 times or in more than half of the
-# documents
-vocabulary <- stf$term[ tf$term_freq > 1 & tf$doc_freq < nrow(dtm) / 2 ]
-dtm = dtm
+text <- philosophy_data$tokenized_txt
+docs <- Corpus(VectorSource(text))
+docs <- docs %>% tm_map(removeWords, stopwords("english")) %>%
+  tm_map(removePunctuation)
+dtm <- TermDocumentMatrix(docs)
+tdm.tidy=tidy(dtm)
+tdm.overall=summarise(group_by(tdm.tidy, term), sum(count))
+```
 
+```{r, fig.height=6, fig.width=6}
+wordcloud(tdm.overall$term, tdm.overall$`sum(count)`,
+          scale=c(10,5),
+          max.words=100,
+          min.freq=50,
+          random.order=FALSE,
+          rot.per=0.3,
+          random.color=FALSE,
+          colors=brewer.pal(20,"Blues"))
+```
+
+From the word cloud there we can observe that the high frequency words are pretty simple and the texts pattern aren't vary a lot. It is hard to observe the influence of any philosopher in this method. We can further investigate the distribution of copurs via a alluvial graph, observe what the author and school each corpus belongs to.
+
+```{r}
+df1 <- philosophy_data %>% select(c('author', 'school', 'sentence_length', 'title', 'original_publication_date')) %>% group_by(title, author, school) %>% summarise(copurs_length = sum(sentence_length))
+
+colourCount <- length(unique(df1$school)) # number of levels
+getPalette <- colorRampPalette(brewer.pal(9, "Set1"))
+
+ggplot(as.data.frame(df1),
+       aes(y = copurs_length, axis1 = author, axis2 = title)) +
+  geom_alluvium(aes(fill = school), width = 1/6) +
+  geom_stratum(width = 1/6, fill = "black", color = "grey") +
+  #geom_label(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("author", "title"), expand = c(.05, .05)) +
+  scale_fill_brewer(type = "qual", palette = "Set3") +
+  ylab('corpus length by sentences') +
+  ggtitle("school information of published corpus by, author and title")
 ```
 
 
 
 
-
-
 ## Conclusion
+
+After analysis from 3 different perspective we can get a sense of the position of philosophers in the history. Kant as a philosopher is the top philosopher directly named in other authors' corpus, but his school, german idealism is not so famous and not even mentioned in any text. Analyze by school we could find that the analytics school are mentioned a lot in other texts, which infers that philosophers like Russel conduct influential research to philosopher in other school. From corpus'  perspective, Aristotle is the school which produced the largest corpus in history of philosophy (by sentences length), which implies Aristotle's position in history is also not omittable since he create his own school (and only himself in this category).
+
+
+
+
 
 
 
